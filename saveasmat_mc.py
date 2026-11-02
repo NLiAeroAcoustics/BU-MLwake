@@ -1,6 +1,7 @@
 from scipy.io import savemat, loadmat
 import pickle 
-def saveasmat_mc(Dir, model,x_train,x_test,y_train,y_test,label_train,coordinate_train,label_test,coordinate_test, nfile = None):       
+import os
+def saveasmat_mc(Dir, model,x_train,x_test,y_train,y_test,label_train,coordinate_train,label_test,coordinate_test, nfile = None, output_keys = None):       
 
     gx_train = coordinate_train[:, :, :, 0]
     gy_train = coordinate_train[:, :, :, 1]
@@ -34,63 +35,32 @@ def saveasmat_mc(Dir, model,x_train,x_test,y_train,y_test,label_train,coordinate
     outputs_train_pred = prediction_train*(output_std+epsi)+output_mean
     outputs_test_pred = prediction_test*(output_std+epsi)+output_mean    
     
-    tke_train = outputs_train[:, :, :, 0]
-    ls_train = outputs_train[:, :, :, 1]
-    vx_train = outputs_train[:, :, :, 2]
-    vt_train = outputs_train[:, :, :, 3]
-    p_train = outputs_train[:, :, :, 4]
-    T_train = outputs_train[:, :, :, 5]
-    vm_train = outputs_train[:, :, :, 6]
-  
-    
-    train_prediction = dict(inputs = inputs_train, 
-                            label = label_train,
-                            x = gx_train,
-                            y = gy_train,
-                            z = gz_train,
-                            r = gr_train, 
-                            th = gth_train,
-                            tke_train = outputs_train[:, :, :, 0],
-                            ls_train = outputs_train[:, :, :, 1],
-                            vx_train = outputs_train[:, :, :, 2],
-                            vt_train = outputs_train[:, :, :, 3],
-                            p_train = outputs_train[:, :, :, 4],
-                            T_train = outputs_train[:, :, :, 5],
-                            vm_train = outputs_train[:, :, :, 6],
-                            tke_train_pred = outputs_train_pred[:, :, :, 0],
-                            ls_train_pred = outputs_train_pred[:, :, :, 1],
-                            vx_train_pred = outputs_train_pred[:, :, :, 2],
-                            vt_train_pred = outputs_train_pred[:, :, :, 3],
-                            p_train_pred = outputs_train_pred[:, :, :, 4],
-                            T_train_pred = outputs_train_pred[:, :, :, 5],
-                            vm_train_pred = outputs_train_pred[:, :, :, 6])
-    
-    test_prediction = dict(inputs = inputs_test, 
-                           label = label_test,
-                           x = gx_test,
-                           y = gy_test,
-                           z= gz_test,
-                           r = gr_test, 
-                           th = gth_test,
-                           tke_test = outputs_test[:, :, :, 0],
-                           ls_test = outputs_test[:, :, :, 1],
-                           vx_test = outputs_test[:, :, :, 2],
-                           vt_test = outputs_test[:, :, :, 3],
-                           p_test = outputs_test[:, :, :, 4],
-                           T_test = outputs_test[:, :, :, 5],
-                           vm_test = outputs_test[:, :, :, 6],
-                           tke_test_pred = outputs_test_pred[:, :, :, 0],
-                           ls_test_pred = outputs_test_pred[:, :, :, 1],
-                           vx_test_pred = outputs_test_pred[:, :, :, 2],
-                           vt_test_pred = outputs_test_pred[:, :, :, 3],
-                           p_test_pred = outputs_test_pred[:, :, :, 4],
-                           T_test_pred = outputs_test_pred[:, :, :, 5],
-                           vm_test_pred = outputs_test_pred[:, :, :, 6],)
+    # Default names preserve the existing seven-channel MAT fields.
+    if output_keys is None:
+        output_keys = ["tke", "LenScale", "vx", "vt", "p", "T", "v_mag"]
+    if len(output_keys) != y_train.shape[-1] or len(output_keys) != y_test.shape[-1]:
+        raise ValueError("Pass output_keys in the same order as the training output channels.")
+    names = [{"LenScale": "ls", "v_mag": "vm"}.get(key, key) for key in output_keys]
+    if len(set(names)) != len(names):
+        raise ValueError("output_keys must have unique MAT field names.")
 
+    train_prediction = dict(inputs=inputs_train, label=label_train,
+                            x=gx_train, y=gy_train, z=gz_train,
+                            r=gr_train, th=gth_train)
+    test_prediction = dict(inputs=inputs_test, label=label_test,
+                           x=gx_test, y=gy_test, z=gz_test,
+                           r=gr_test, th=gth_test)
+    for i, name in enumerate(names):
+        train_prediction[name + "_train"] = outputs_train[:, :, :, i]
+        train_prediction[name + "_train_pred"] = outputs_train_pred[:, :, :, i]
+        test_prediction[name + "_test"] = outputs_test[:, :, :, i]
+        test_prediction[name + "_test_pred"] = outputs_test_pred[:, :, :, i]
+
+    os.makedirs(Dir, exist_ok=True)
+    savemat(Dir + "/train_prediction.mat", train_prediction)
+    savemat(Dir + "/test_prediction.mat", test_prediction)
     
-    savemat(Dir+"/train_prediction.mat", train_prediction)
-    savemat(Dir+"/test_prediction.mat", test_prediction)
-    
+
 def pred2mat_mc(varname, Dir, model,x_test,label_test,coordinate_test):       
     with open(nfile, 'rb') as n:
         norm = pickle.load(n)
